@@ -1,163 +1,72 @@
-# Parqueaderos Multisede
+# Parqueaderos Multisede · MongoDB
 
-Proyecto #1 — Base de datos MongoDB para la gestión de un sistema de parqueaderos multisede.
+Base de datos MongoDB para un sistema de parqueaderos con varias sedes: modelo con validación, datos de prueba, agregaciones analíticas, roles RBAC y transacciones.
 
-## Descripción
+![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
+![mongosh](https://img.shields.io/badge/mongosh-scripts-4EA94B)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
 
-Campus Parking es una empresa que administra múltiples parqueaderos ubicados en distintas ciudades. Este proyecto diseña e implementa, sobre MongoDB, la base de datos que soporta la operación de dicho sistema, reemplazando el manejo de la información mediante hojas de cálculo locales.
+## Qué resuelve
 
-El modelo de datos permite gestionar usuarios con distintos niveles de acceso (administradores, empleados de sede y clientes), registrar vehículos, administrar sedes y sus zonas internas —con cupos, tarifas y tipos de vehículo permitidos— y almacenar el histórico de ingresos y salidas de vehículos, incluyendo el tiempo total y el costo asociado a cada parqueo.
+*Campus Parking* administra parqueaderos en varias ciudades con hojas de cálculo locales. Este proyecto modela esa operación en MongoDB: usuarios con distintos niveles de acceso, vehículos, sedes con zonas (cupos, tarifas y tipos de vehículo permitidos) y el histórico de parqueos con tiempo y costo.
 
-El proyecto está implementado íntegramente mediante scripts de MongoDB ejecutados con mongosh. No incluye frontend, API REST ni Node.js.
+## Funcionalidades
 
-## Tecnologías utilizadas
+- **Modelo híbrido** de cinco colecciones (`usuarios`, `vehiculos`, `sedes`, `zonas`, `parqueos`): referencias por `ObjectId`, campos *snapshot* para conservar histórico y embebidos solo cuando pertenecen a una única entidad.
+- **Validación `$jsonSchema`** con `enum` y reglas de negocio, e **índices** únicos (documento, correo, placa, nombre de sede).
+- **Datos de prueba** coherentes (sedes, zonas, usuarios, vehículos y parqueos activos y finalizados).
+- **8 agregaciones** analíticas: ocupación, ingresos por sede, uso por cliente, frecuencia por tipo de vehículo, historial por usuario y reporte general multisede.
+- **RBAC**: roles personalizados para administrador, empleado de sede y cliente, con script de pruebas de permisos.
+- **Transacciones** con sesiones (`registrarIngreso` y `registrarSalida`) con `commitTransaction()` y `abortTransaction()` ante errores.
 
-* **MongoDB** — Motor de base de datos NoSQL utilizado para el modelado, almacenamiento y consulta de la información.
-* **mongosh** — MongoDB Shell utilizada para la ejecución de todos los scripts del proyecto.
+## Stack
 
-El proyecto no utiliza frameworks de backend, librerías de Node.js ni tecnologías de frontend. Toda la lógica está implementada mediante scripts nativos de MongoDB.
+MongoDB · mongosh · JavaScript · Docker Compose (instancia local). El driver `mongodb` de Node aparece solo en `docker/package.json`.
 
-## Estructura del proyecto
+## Estructura
 
-El proyecto está organizado en los siguientes archivos:
-
+```text
+├── db_config/db_config.js          # base, colecciones, $jsonSchema e índices
+├── test_dataset/                   # datos de prueba (+ script de pruebas de validación)
+├── aggregations/aggregations.js    # 8 agregaciones
+├── roles/
+│   ├── roles.js                    # roles y usuarios RBAC
+│   └── pruebas_roles.js            # pruebas de permisos por rol
+├── roles_exam/roles_exam.js        # roles del examen
+├── transactions/transactions.js    # ingreso y salida transaccionales
+└── docker/                         # docker-compose.yml y package.json
 ```
-db_config.js
-test_dataset.js
-aggregations.js
-roles.js
-transactions.js
-README.md
-```
 
-### `db_config.js`
+## Requisitos
 
-Crea la base de datos `parqueaderosMultisede` y sus colecciones, junto con las validaciones mediante `$jsonSchema` y los índices correspondientes.
+- MongoDB (local o en Docker) y `mongosh`.
+- Docker, solo si usas el `docker-compose.yml` incluido.
 
-### `test_dataset.js`
+## Instalación y ejecución
 
-Puebla las colecciones con un conjunto de datos de prueba realista y coherente mediante operaciones `insertMany`.
+1. Levanta MongoDB (el compose lo expone en el puerto `27018`):
 
-### `aggregations.js`
+   ```bash
+   docker compose -f docker/docker-compose.yml up -d
+   ```
 
-Contiene las consultas analíticas construidas con el framework de agregación de MongoDB, utilizadas para generar reportes del sistema.
+2. Ejecuta los scripts en orden con `mongosh` (ajusta la cadena de conexión a tu instancia):
 
-### `roles.js`
+   ```bash
+   mongosh "mongodb://localhost:27018" --file db_config/db_config.js
+   mongosh "mongodb://localhost:27018" --file test_dataset/test_dataset.js
+   mongosh "mongodb://localhost:27018" --file aggregations/aggregations.js
+   mongosh "mongodb://localhost:27018" --file roles/roles.js
+   ```
 
-Define los roles personalizados de MongoDB y configura el control de acceso basado en roles (RBAC) para administradores, empleados de sede y clientes.
+   Si el contenedor requiere autenticación, añade `-u <usuario> -p` (mongosh pedirá la contraseña) y `--authenticationDatabase admin`.
+3. Las transacciones requieren un *replica set*. `transactions/transactions.js` define `registrarIngreso` y `registrarSalida`; cárgalo desde una sesión de `mongosh` o desde Node con el driver.
 
-### `transactions.js`
+## Variables de entorno
 
-Contiene la implementación de transacciones MongoDB utilizando sesiones (`session`). Permite ejecutar operaciones de escritura de manera atómica, garantizando que los cambios sean confirmados completamente o revertidos mediante `abortTransaction()` cuando ocurre un error.
+No usa `.env`. La conexión y las credenciales se pasan por la cadena de `mongosh` o se definen en `docker/docker-compose.yml`. Las contraseñas de ejemplo son de demostración local: cámbialas si despliegas fuera de tu máquina.
 
-## Modelo de datos
+## Autor
 
-El sistema está compuesto por cinco colecciones, diseñadas bajo un modelo híbrido de MongoDB: se utilizan referencias mediante `ObjectId` para relacionar colecciones, campos de tipo snapshot para preservar información histórica y documentos embebidos únicamente cuando la información pertenece exclusivamente a una entidad.
-
-### `usuarios`
-
-Almacena la información de todas las personas que interactúan con el sistema, diferenciando entre administradores, empleados de sede y clientes.
-
-### `vehiculos`
-
-Registra los vehículos asociados a cada cliente, incluyendo distintos tipos como automóviles, motocicletas, bicicletas y camiones.
-
-### `sedes`
-
-Representa los parqueaderos físicos administrados por la empresa, ubicados en distintas ciudades.
-
-### `zonas`
-
-Representa las áreas internas de cada sede, cada una con su capacidad, cupos disponibles, tarifa y tipos de vehículo permitidos.
-
-### `parqueos`
-
-Es la colección principal del sistema para el registro de operaciones de parqueo, almacenando la información relacionada con ingresos, salidas, tiempo total y costo asociado.
-
-## Características implementadas
-
-### Validación de datos (JSON Schema)
-
-Cada colección cuenta con un esquema de validación `$jsonSchema` que define tipos de datos, campos obligatorios y reglas de negocio mediante restricciones como `enum`.
-
-### Índices
-
-Se definieron índices sobre los campos más relevantes para optimizar consultas y aplicar restricciones de unicidad, como documentos de identificación, correos de usuarios, placas de vehículos y nombres de sedes.
-
-### Datos de prueba
-
-El sistema incluye un conjunto de datos de prueba realista que cubre sedes, zonas, usuarios, vehículos y registros de parqueo, incluyendo casos con vehículos actualmente registrados en parqueos activos.
-
-### Consultas de agregación
-
-Se implementaron consultas analíticas mediante el framework de agregación de MongoDB orientadas a la generación de reportes de negocio.
-
-### Control de acceso (RBAC)
-
-Se configuraron roles personalizados de MongoDB para diferenciar los permisos según el tipo de usuario del sistema.
-
-### Transacciones MongoDB
-
-Se implementaron transacciones mediante sesiones de MongoDB para garantizar operaciones atómicas sobre múltiples documentos, permitiendo confirmar cambios mediante `commitTransaction()` o revertirlos mediante `abortTransaction()` en caso de fallo.
-
-## Seguridad y control de acceso (RBAC)
-
-MongoDB implementa tres perfiles principales:
-
-* Administrador.
-* Empleado de sede.
-* Cliente.
-
-Los permisos son administrados mediante roles personalizados definidos en el archivo `roles.js`, restringiendo operaciones de lectura y escritura según el nivel de acceso correspondiente.
-
-La autenticación puede habilitarse mediante la configuración de MongoDB con la opción `--auth`.
-
-## Consultas de agregación
-
-El archivo `aggregations.js` contiene consultas analíticas construidas con el framework de agregación de MongoDB, orientadas a generar reportes sobre:
-
-* Ocupación de zonas y sedes.
-* Ingresos generados por sede.
-* Uso del sistema por parte de clientes.
-* Frecuencia de uso según tipo de vehículo.
-* Historial de parqueos por usuario.
-
-Cada consulta cuenta con comentarios explicativos dentro del archivo correspondiente.
-
-## Transacciones MongoDB
-
-El archivo `transactions.js` contiene la implementación de operaciones transaccionales utilizando sesiones de MongoDB.
-
-Las transacciones permiten ejecutar múltiples operaciones relacionadas dentro de una única unidad de trabajo, asegurando consistencia de los datos mediante:
-
-* Inicio de sesión transaccional.
-* Confirmación mediante `commitTransaction()`.
-* Reversión mediante `abortTransaction()` cuando ocurre un error.
-
-## Instalación
-
-Para ejecutar el proyecto es necesario contar con una instancia de MongoDB disponible y acceso a `mongosh`.
-
-Los scripts deben ejecutarse en el siguiente orden:
-
-1. **db_config.js** — Crea la estructura de la base de datos, colecciones, validaciones e índices.
-2. **test_dataset.js** — Inserta los datos de prueba.
-3. **aggregations.js** — Ejecuta las consultas analíticas.
-4. **roles.js** — Configura los roles personalizados y permisos.
-5. **transactions.js** — Ejecuta las operaciones transaccionales implementadas.
-
-Cada archivo puede ejecutarse desde `mongosh`, cargando el script correspondiente dentro de una sesión activa.
-
-## Estado del proyecto
-
-El proyecto cuenta con la implementación completa de las principales funcionalidades requeridas:
-
-* Modelo de datos en MongoDB.
-* Validaciones mediante `$jsonSchema`.
-* Índices.
-* Dataset de prueba.
-* Consultas de agregación.
-* Control de acceso mediante roles RBAC.
-* Implementación de transacciones MongoDB.
-
-La solución fue desarrollada completamente mediante scripts nativos de MongoDB ejecutados con `mongosh`, sin utilizar frontend, API REST o Node.js.
+**Eduardo Antonio Cruz Bolaños** — [@TOTO05-a](https://github.com/TOTO05-a)
